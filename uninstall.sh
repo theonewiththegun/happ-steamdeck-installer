@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 #
-# Happ Desktop uninstaller (user install in ~/.local + happd system service)
+# Happ Desktop uninstaller (/var/lib/happ, happd system service, ~/.local launcher)
 
 set -Eeuo pipefail
 
-INSTALLER_VERSION="1.1.0"
+INSTALLER_VERSION="2.0.0"
 PREFIX="${HOME}/.local"
 BIN_PATH="${PREFIX}/bin/happ"
 DESKTOP_PATH="${PREFIX}/share/applications/happ.desktop"
 MARKER_DIR="${PREFIX}/share/happ-installer"
-HAPP_OPT_DIR="${PREFIX}/opt/happ"
+HAPP_ROOT="/var/lib/happ"
+LEGACY_OPT_DIR="${PREFIX}/opt/happ"
 HAPPD_SERVICE_PATH="/etc/systemd/system/happd.service"
 
 if [[ -t 1 ]] && command -v tput >/dev/null 2>&1 && [[ "$(tput colors 2>/dev/null || echo 0)" -ge 8 ]]; then
@@ -30,8 +31,8 @@ echo
 
 removed=0
 
-remove_happd_service() {
-  if [[ ! -f "${HAPPD_SERVICE_PATH}" ]]; then
+remove_root_files() {
+  if [[ ! -f "${HAPPD_SERVICE_PATH}" && ! -d "${HAPP_ROOT}" ]]; then
     return 0
   fi
 
@@ -40,21 +41,24 @@ remove_happd_service() {
     return 0
   fi
 
-  info "Removing happd system service (sudo)..."
+  info "Removing happd service and ${HAPP_ROOT} (sudo)..."
   if sudo -v; then
     sudo systemctl disable --now happd.service 2>/dev/null || true
     sudo rm -f "${HAPPD_SERVICE_PATH}"
     sudo systemctl daemon-reload 2>/dev/null || true
+    sudo rm -rf "${HAPP_ROOT}" "${HAPP_ROOT}.old"
+    sudo rm -f /var/log/happd.log /var/log/happd.log.old
     removed=1
-    info "Removed ${HAPPD_SERVICE_PATH}"
+    info "Removed ${HAPPD_SERVICE_PATH} and ${HAPP_ROOT}"
   else
-    warn "sudo failed — remove happd manually:"
+    warn "sudo failed - remove these manually:"
     echo "  sudo systemctl disable --now happd.service"
     echo "  sudo rm -f ${HAPPD_SERVICE_PATH} && sudo systemctl daemon-reload"
+    echo "  sudo rm -rf ${HAPP_ROOT}"
   fi
 }
 
-remove_happd_service
+remove_root_files
 
 if [[ -f "${BIN_PATH}" || -L "${BIN_PATH}" ]]; then
   rm -f "${BIN_PATH}"
@@ -62,10 +66,10 @@ if [[ -f "${BIN_PATH}" || -L "${BIN_PATH}" ]]; then
   info "Removed ${BIN_PATH}"
 fi
 
-if [[ -d "${HAPP_OPT_DIR}" ]]; then
-  rm -rf "${HAPP_OPT_DIR}"
+if [[ -d "${LEGACY_OPT_DIR}" ]]; then
+  rm -rf "${LEGACY_OPT_DIR}"
   removed=1
-  info "Removed ${HAPP_OPT_DIR}"
+  info "Removed ${LEGACY_OPT_DIR}"
   rmdir "${PREFIX}/opt" 2>/dev/null || true
 fi
 
@@ -99,8 +103,10 @@ if command -v update-desktop-database >/dev/null 2>&1; then
 fi
 
 if [[ "${removed}" -eq 0 ]]; then
-  echo "Nothing to remove — Happ does not appear to be installed"
+  echo "Nothing to remove - Happ does not appear to be installed"
   exit 0
 fi
 
 ok "Happ removed successfully"
+echo "Settings and daemon state are kept. To remove them too:"
+echo "  rm -rf ~/.config/happ ~/.local/share/happ && sudo rm -rf /var/lib/happd"

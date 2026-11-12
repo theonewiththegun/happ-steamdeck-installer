@@ -10,17 +10,23 @@
 </p>
 
 <p align="center">
-  One-command installer for <a href="https://github.com/Happ-proxy/happ-desktop">Happ Desktop</a> on <strong>SteamOS</strong>, <strong>Steam Deck</strong>, and other <strong>immutable Linux</strong> gaming distros — app in <code>~/.local</code>, no <code>steamos-readonly disable</code>.
+  One-command installer for <a href="https://github.com/Happ-proxy/happ-desktop">Happ Desktop</a> on <strong>SteamOS</strong>, <strong>Steam Deck</strong>, and other <strong>immutable Linux</strong> gaming distros - no <code>steamos-readonly disable</code>.
+</p>
+
+<p align="center">
+  Fork of <a href="https://github.com/DeadFlamingo/happ-steamdeck-installer">DeadFlamingo/happ-steamdeck-installer</a> that installs Happ root-owned, so the root <code>happd</code> daemon cannot be swapped out by anything running as your user.
 </p>
 
 ## Features
 
-- **No system package manager** — app in `~/.local`, one `sudo` for `happd` (TUN/VPN)
-- **Always latest release** — uses the GitHub API (no manual script updates)
-- **Steam Deck / Gaming Mode** — desktop launcher + instructions to add to Steam
-- **Safe on immutable systems** — SteamOS, Bazzite, ChimeraOS, Nobara, etc.
-- **x86_64 and aarch64** — auto-detects architecture
-- **Easy uninstall** — included `uninstall.sh`
+- **No system package manager** - app in root-owned `/var/lib/happ`, launcher and icons in `~/.local`
+- **Root daemon runs root-owned code** - `happd` runs as root, so nothing it executes is writable by `deck`
+- **Verified download** - the package's SHA-256 is checked against the GitHub release digest, as root
+- **Always latest release** - uses the GitHub API (no manual script updates)
+- **Steam Deck / Gaming Mode** - desktop launcher + instructions to add to Steam
+- **Safe on immutable systems** - SteamOS, Bazzite, ChimeraOS, Nobara, etc.
+- **x86_64 and aarch64** - auto-detects architecture
+- **Easy uninstall** - included `uninstall.sh`
 
 ## Supported systems
 
@@ -36,16 +42,20 @@
 
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/DeadFlamingo/happ-steamdeck-installer/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/theonewiththegun/happ-steamdeck-installer/main/install.sh | bash
 ```
->In Konsole (Desktop Mode on Steam Deck). The script will ask for your **sudo** password once to enable `happd` (TUN/VPN).
+>In Konsole (Desktop Mode on Steam Deck). The script needs **sudo**: if you have never set a password for `deck`, run `passwd` first.
+>
+>SteamOS updates replace the root filesystem. Happ lives in `/var` and the service in `/etc`, which normally survive, but if Happ ever stops launching after an update, run the install command again.
 
 
 ## Uninstall
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/DeadFlamingo/happ-steamdeck-installer/main/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/theonewiththegun/happ-steamdeck-installer/main/uninstall.sh | bash
 ```
+
+Settings (`~/.config/happ`, `~/.local/share/happ`) and daemon state (`/var/lib/happd`) are kept; the uninstaller prints the command to remove them.
 
 ## After installation
 
