@@ -9,12 +9,13 @@
 #   - Arch Linux and other rolling distros
 #   - Immutable / read-only root filesystems (no steamos-readonly disable)
 #
-# Installs Happ Desktop into a root-owned /var/lib/happ, because happd runs it
-# as root; launcher and icons go to ~/.local. Needs sudo (run `passwd` first).
+# Installs Happ Desktop into a root-owned /home/.happ, because happd runs it as
+# root; /home is the big partition on SteamOS (/var is tiny). Launcher and
+# icons go to ~/.local. Needs sudo (run `passwd` first).
 
 set -Eeuo pipefail
 
-INSTALLER_VERSION="2.0.0"
+INSTALLER_VERSION="2.1.0"
 HAPPD_SERVICE_PATH="/etc/systemd/system/happd.service"
 UPSTREAM_REPO="Happ-proxy/happ-desktop"
 LATEST_API="https://api.github.com/repos/${UPSTREAM_REPO}/releases/latest"
@@ -24,7 +25,8 @@ BIN_DIR="${PREFIX}/bin"
 APP_DIR="${PREFIX}/share/applications"
 ICON_DIR="${PREFIX}/share/icons/hicolor/256x256/apps"
 MARKER_FILE="${PREFIX}/share/happ-installer/installed.json"
-HAPP_ROOT="/var/lib/happ"
+HAPP_ROOT="/home/.happ"
+OLD_VAR_ROOT="/var/lib/happ"
 HAPP_BIN="${HAPP_ROOT}/bin/Happ"
 LEGACY_OPT_DIR="${PREFIX}/opt/happ"
 REPO_RAW="https://raw.githubusercontent.com/theonewiththegun/happ-steamdeck-installer/main"
@@ -133,6 +135,10 @@ json_get_asset() {
         echo "${json}" | jq -r --arg n "${pkg_name}" \
           '.assets[] | select(.name == $n) | .browser_download_url'
         ;;
+      size)
+        echo "${json}" | jq -r --arg n "${pkg_name}" \
+          '.assets[] | select(.name == $n) | .size'
+        ;;
       digest)
         echo "${json}" | jq -r --arg n "${pkg_name}" \
           '.assets[] | select(.name == $n) | .digest // empty'
@@ -159,6 +165,8 @@ if asset is None:
     sys.exit(1)
 if field == "url":
     print(asset["browser_download_url"])
+elif field == "size":
+    print(asset["size"])
 elif field == "digest":
     print(asset.get("digest") or "")
 elif field == "version":
@@ -174,6 +182,28 @@ PY
 
 # --- install steps -----------------------------------------------------------
 
+# Archive in ~/.cache, its root copy, the unpacked tree (~3.5x) and the
+# previous install all sit on /home at once.
+check_free_space() {
+  local archive_bytes=$1 dir avail need
+  dir="$(dirname "${HAPP_ROOT}")"
+  need=$(( archive_bytes * 5 + 256 * 1024 * 1024 ))
+  avail="$(df -PB1 "${dir}" | awk 'NR==2 {print $4}')"
+  if [[ -n "${avail}" ]] && (( avail < need )); then
+    die "Not enough space on ${dir}: need $(( need / 1048576 )) MB free, have $(( avail / 1048576 )) MB"
+  fi
+}
+
+# Earlier versions installed to /var/lib/happ and unpacked in /var/tmp, which
+# fills SteamOS's small /var.
+remove_var_leftovers() {
+  if sudo test -e "${OLD_VAR_ROOT}" || sudo test -e "${OLD_VAR_ROOT}.old" \
+    || compgen -G "/var/tmp/happ-install.*" >/dev/null; then
+    info "Removing earlier install files from /var"
+    sudo rm -rf "${OLD_VAR_ROOT}" "${OLD_VAR_ROOT}.old" /var/tmp/happ-install.*
+  fi
+}
+
 require_sudo() {
   require_cmd sudo
   info "Asking for sudo (Happ is installed root-owned, happd runs as root)..."
@@ -184,7 +214,7 @@ require_sudo() {
 # hash check and the install is writable by the desktop user.
 stage_package_as_root() {
   local archive=$1 expected=$2 actual
-  ROOT_TMP="$(sudo mktemp -d /var/tmp/happ-install.XXXXXX)"
+  ROOT_TMP="$(sudo mktemp -d "$(dirname "${HAPP_ROOT}")/.happ-install.XXXXXX")"
   sudo install -m600 "${archive}" "${ROOT_TMP}/pkg.tar.zst"
   actual="$(sudo sha256sum "${ROOT_TMP}/pkg.tar.zst" | cut -d' ' -f1)"
   [[ "${actual}" == "${expected}" ]] \
@@ -388,7 +418,7 @@ main() {
   require_cmd curl
   check_tar_zstd
 
-  local arch pkg_url digest version archive_name archive_path
+  local arch pkg_url pkg_size digest version archive_name archive_path
   arch="$(detect_arch)"
   archive_name="Happ.linux.${arch}.pkg.tar.zst"
 
@@ -397,6 +427,7 @@ main() {
   latest_json="$(fetch_latest_json)"
 
   pkg_url="$(json_get_asset "${latest_json}" "${arch}" url)" || true
+  pkg_size="$(json_get_asset "${latest_json}" "${arch}" size)" || true
   digest="$(json_get_asset "${latest_json}" "${arch}" digest)" || true
   version="$(json_get_asset "${latest_json}" "${arch}" version)" || true
 
@@ -407,6 +438,7 @@ main() {
     || die "GitHub returned no SHA-256 digest for ${archive_name}; refusing to install unverified"
 
   ok "Latest version: ${version}"
+  [[ "${pkg_size}" =~ ^[0-9]+$ ]] && check_free_space "${pkg_size}"
 
   mkdir -p "${HOME}/.cache"
   TMP_DIR="$(mktemp -d "${HOME}/.cache/happ-installer.XXXXXX")"
@@ -418,6 +450,7 @@ main() {
     || die "Download failed"
 
   require_sudo
+  remove_var_leftovers
 
   info "[2/5] Verifying and extracting package..."
   stage_package_as_root "${archive_path}" "${digest#sha256:}"
@@ -457,7 +490,7 @@ main() {
   echo "  3. Launch Happ from Gaming Mode on Steam Deck."
   echo
   echo "App files: ${HAPP_ROOT} (root-owned)  |  TUN daemon: ${HAPPD_SERVICE_PATH}"
-  echo "If a SteamOS update removes Happ, re-run this installer."
+  echo "Re-run this installer to update Happ."
   echo
   echo "To remove: curl -fsSL ${REPO_RAW}/uninstall.sh | bash"
 }

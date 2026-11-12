@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 #
-# Happ Desktop uninstaller (/var/lib/happ, happd system service, ~/.local launcher)
+# Happ Desktop uninstaller (/home/.happ, happd system service, ~/.local launcher)
 
 set -Eeuo pipefail
 
-INSTALLER_VERSION="2.0.0"
+INSTALLER_VERSION="2.1.0"
 PREFIX="${HOME}/.local"
 BIN_PATH="${PREFIX}/bin/happ"
 DESKTOP_PATH="${PREFIX}/share/applications/happ.desktop"
 MARKER_DIR="${PREFIX}/share/happ-installer"
-HAPP_ROOT="/var/lib/happ"
+HAPP_ROOT="/home/.happ"
+OLD_VAR_ROOT="/var/lib/happ"
 LEGACY_OPT_DIR="${PREFIX}/opt/happ"
 HAPPD_SERVICE_PATH="/etc/systemd/system/happd.service"
 
@@ -32,7 +33,7 @@ echo
 removed=0
 
 remove_root_files() {
-  if [[ ! -f "${HAPPD_SERVICE_PATH}" && ! -d "${HAPP_ROOT}" ]]; then
+  if [[ ! -f "${HAPPD_SERVICE_PATH}" && ! -d "${HAPP_ROOT}" && ! -d "${OLD_VAR_ROOT}" ]]; then
     return 0
   fi
 
@@ -46,7 +47,8 @@ remove_root_files() {
     sudo systemctl disable --now happd.service 2>/dev/null || true
     sudo rm -f "${HAPPD_SERVICE_PATH}"
     sudo systemctl daemon-reload 2>/dev/null || true
-    sudo rm -rf "${HAPP_ROOT}" "${HAPP_ROOT}.old"
+    sudo rm -rf "${HAPP_ROOT}" "${HAPP_ROOT}.old" "${OLD_VAR_ROOT}" "${OLD_VAR_ROOT}.old" \
+      /home/.happ-install.* /var/tmp/happ-install.*
     sudo rm -f /var/log/happd.log /var/log/happd.log.old
     removed=1
     info "Removed ${HAPPD_SERVICE_PATH} and ${HAPP_ROOT}"

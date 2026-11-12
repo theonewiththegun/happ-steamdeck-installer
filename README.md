@@ -19,7 +19,7 @@
 
 ## Features
 
-- **No system package manager** - app in root-owned `/var/lib/happ`, launcher and icons in `~/.local`
+- **No system package manager** - app in root-owned `/home/.happ` (the big partition; `/var` is tiny on SteamOS), launcher and icons in `~/.local`
 - **Root daemon runs root-owned code** - `happd` runs as root, so nothing it executes is writable by `deck`
 - **Verified download** - the package's SHA-256 is checked against the GitHub release digest, as root
 - **Always latest release** - uses the GitHub API (no manual script updates)
@@ -46,7 +46,7 @@ curl -fsSL https://raw.githubusercontent.com/theonewiththegun/happ-steamdeck-ins
 ```
 >In Konsole (Desktop Mode on Steam Deck). The script needs **sudo**: if you have never set a password for `deck`, run `passwd` first.
 >
->SteamOS updates replace the root filesystem. Happ lives in `/var` and the service in `/etc`, which normally survive, but if Happ ever stops launching after an update, run the install command again.
+>It needs about 650 MB free on `/home` while installing (about 300 MB once done). Running it again updates Happ, and also clears files that installer 2.0.0 left in `/var`.
 
 
 ## Uninstall
